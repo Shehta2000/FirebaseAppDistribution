@@ -1,0 +1,128 @@
+name: Simple APK & IPA Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+  push:
+    branches:
+      - main
+
+env:
+  FLUTTER_VERSION: '3.24.3'
+  JAVA_VERSION: '17'
+
+jobs:
+  build-android:
+    name: 🤖 Build Android APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: 📦 Get dependencies
+        run: flutter pub get
+
+      - name: 🏗️ Build APK
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+          echo "Building APK in $BUILD_TYPE mode..."
+          flutter build apk --$BUILD_TYPE
+
+      - name: 📱 Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-${{ github.event.inputs.build_type || 'release' }}
+          path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 30
+
+  build-ios:
+    name: 🍎 Build iOS IPA
+    runs-on: macos-latest
+    
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: 📦 Get dependencies
+        run: flutter pub get
+
+      - name: 🏗️ Build iOS
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+          echo "Building iOS in $BUILD_TYPE mode..."
+          flutter build ios --$BUILD_TYPE --no-codesign
+
+      - name: 📦 Create IPA
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+          
+          if [ "$BUILD_TYPE" == "release" ]; then
+            APP_PATH="build/ios/iphoneos/Runner.app"
+          else
+            APP_PATH="build/ios/iphonesimulator/Runner.app"
+          fi
+          
+          if [ -d "$APP_PATH" ]; then
+            echo "✅ Found Runner.app at: $APP_PATH"
+            mkdir -p Payload
+            cp -r "$APP_PATH" Payload/
+            zip -r "firebase-app-distribution-${BUILD_TYPE}.ipa" Payload
+            echo "✅ IPA created successfully"
+            ls -la *.ipa
+          else
+            echo "❌ Runner.app not found at $APP_PATH"
+            echo "🔍 Searching for Runner.app..."
+            find build -name "Runner.app" -type d || echo "No Runner.app found"
+          fi
+
+      - name: 📱 Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa-${{ github.event.inputs.build_type || 'release' }}
+          path: "*.ipa"
+          retention-days: 30
+        continue-on-error: true
+
+  summary:
+    name: 📊 Build Summary
+    if: always()
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📊 Create Summary
+        run: |
+          echo "## 🎉 Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 🤖 **Android APK**: ${{ needs.build-android.result == 'success' && '✅ Success' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🍎 **iOS IPA**: ${{ needs.build-ios.result == 'success' && '✅ Success' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📥 Download Files:" >> $GITHUB_STEP_SUMMARY
+          echo "Go to **Artifacts** section below to download APK/IPA files" >> $GITHUB_STEP_SUMMARY
