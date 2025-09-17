@@ -4,3 +4,5 @@ import 'package:flutter/material.dart';
 void main() {
   runApp(FirebaseAppDistribution());
 }
+
+// CI/CD Pipeline is now active! 🚀
