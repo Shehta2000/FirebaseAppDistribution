@@ -92,42 +92,66 @@ jobs:
       - name: Run tests
         run: flutter test
 
-      # Step 5: Build iOS (No code signing for now)
+      # Step 5: Check iOS project structure
+      - name: Check iOS project
+        run: |
+          echo "🔍 Checking iOS project structure..."
+          ls -la ios/
+          if [ -f "ios/Podfile" ]; then
+            echo "✅ Podfile found"
+          else
+            echo "⚠️ Podfile not found"
+          fi
+          if [ -d "ios/Runner.xcodeproj" ]; then
+            echo "✅ Xcode project found"
+          else
+            echo "⚠️ Xcode project not found"
+          fi
+
+      # Step 6: Build iOS (No code signing for now)
       - name: Build iOS
         run: |
           echo "🍎 Building iOS app..."
           flutter build ios --release --no-codesign --verbose
         continue-on-error: true
 
-      # Step 6: Create IPA (if build succeeds)
+      # Step 7: Create IPA (if build succeeds)
       - name: Create IPA file
         run: |
           echo "📦 Creating IPA file..."
-          cd ios
-          # Create Payload directory
-          mkdir -p Payload
-          # Copy the app to Payload directory
-          if [ -d "build/Runner.app" ]; then
-            cp -r build/Runner.app Payload/
+          # Find the .app file in the correct location
+          APP_PATH=$(find . -name "Runner.app" -type d | head -1)
+          if [ -n "$APP_PATH" ]; then
+            echo "✅ Found Runner.app at: $APP_PATH"
+            # Create Payload directory
+            mkdir -p Payload
+            # Copy the app to Payload directory
+            cp -r "$APP_PATH" Payload/
             # Create IPA
             zip -r Runner.ipa Payload
             echo "✅ IPA created successfully: Runner.ipa"
             ls -la *.ipa
           else
-            echo "❌ Runner.app not found, checking build directory..."
+            echo "❌ Runner.app not found, searching everywhere..."
             find . -name "*.app" -type d
+            echo "Checking build directories:"
+            ls -la ios/build/ || echo "No ios/build directory"
+            ls -la build/ || echo "No build directory"
           fi
         continue-on-error: true
 
-      # Step 7: Upload IPA as artifact
+      # Step 8: Upload IPA as artifact (if exists)
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v3
         with:
           name: ios-ipa
-          path: ios/*.ipa
+          path: |
+            *.ipa
+            ios/*.ipa
+        if-no-files-found: ignore
         continue-on-error: true
 
-      # Step 8: Show iOS build info
+      # Step 9: Show iOS build info
       - name: Show iOS build info
         run: |
           echo "🍎 iOS Build Information:"
