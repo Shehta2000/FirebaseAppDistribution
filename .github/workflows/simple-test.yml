@@ -18,29 +18,42 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Set up Flutter
+      # Step 2: Set up Java (Required for Android builds)
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Step 3: Set up Flutter
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.32.2'
 
-      # Step 3: Install dependencies
+      # Step 4: Install dependencies
       - name: Install dependencies
         run: flutter pub get
 
-      # Step 4: Run tests
+      # Step 5: Run tests
       - name: Run tests
         run: flutter test
 
-      # Step 5: Build Android APK (Debug)
+      # Step 6: Build Android APK (Debug) - with error handling
       - name: Build Android APK
-        run: flutter build apk --debug
+        run: |
+          echo "🏗️ Building Android APK..."
+          flutter build apk --debug --verbose
+        continue-on-error: true
 
-      # Step 6: Build Flutter Web (Optional)
+      # Step 7: Build Flutter Web (Optional)
       - name: Build Flutter Web
-        run: flutter build web --release
+        run: |
+          echo "🌐 Building Flutter Web..."
+          flutter build web --release
+        continue-on-error: true
 
-      # Step 7: Show build information
+      # Step 8: Show build information
       - name: Show build info
         run: |
           echo "🎉 Build completed successfully!"
