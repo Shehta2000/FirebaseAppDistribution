@@ -148,7 +148,6 @@ jobs:
           path: |
             *.ipa
             ios/*.ipa
-        if-no-files-found: ignore
         continue-on-error: true
 
       # Step 9: Show iOS build info
