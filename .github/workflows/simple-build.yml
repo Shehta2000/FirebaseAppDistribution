@@ -47,7 +47,11 @@ jobs:
         run: |
           BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
           echo "Building APK in $BUILD_TYPE mode..."
-          flutter build apk --$BUILD_TYPE
+          if [ "$BUILD_TYPE" == "release" ]; then
+            flutter build apk --release
+          else
+            flutter build apk --debug
+          fi
 
       - name: 📱 Upload APK
         uses: actions/upload-artifact@v4
