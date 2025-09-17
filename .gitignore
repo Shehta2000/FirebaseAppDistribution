@@ -43,3 +43,21 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Signing and sensitive files
+android/key.properties
+android/app/keystore.jks
+android/app/*.jks
+android/app/*.p12
+ios/Runner.mobileprovision
+ios/certificate.p12
+ios/*.ipa
+ios/Runner.xcarchive/
+
+# Firebase and CI/CD secrets
+google-services.json.backup
+GoogleService-Info.plist.backup
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
