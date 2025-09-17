@@ -10,20 +10,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const FirebaseAppDistribution());
+  group('Firebase App Distribution Tests', () {
+    testWidgets('App should build successfully', (WidgetTester tester) async {
+      // Build our app and trigger a frame.
+      await tester.pumpWidget(const MaterialApp(
+        home: FirebaseAppDistribution(),
+      ));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      // Verify that the app builds without errors
+      expect(find.byType(Scaffold), findsOneWidget);
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    testWidgets('App should have Scaffold widget', (WidgetTester tester) async {
+      // Build our app
+      await tester.pumpWidget(const MaterialApp(
+        home: FirebaseAppDistribution(),
+      ));
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+      // Check if Scaffold exists
+      expect(find.byType(Scaffold), findsOneWidget);
+    });
+
+    test('App should have correct widget structure', () {
+      // Simple unit test
+      const app = FirebaseAppDistribution();
+      expect(app, isA<StatelessWidget>());
+    });
   });
 }

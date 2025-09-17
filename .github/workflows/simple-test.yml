@@ -1,0 +1,74 @@
+name: Simple Flutter Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  FLUTTER_VERSION: '3.24.0'
+
+jobs:
+  test:
+    name: Flutter Test & Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: 📦 Get Flutter dependencies
+        run: |
+          echo "🔄 Installing Flutter dependencies..."
+          flutter --version
+          flutter pub get
+          echo "✅ Dependencies installed successfully!"
+
+      - name: 🔍 Verify Flutter doctor
+        run: |
+          echo "🩺 Running Flutter doctor..."
+          flutter doctor -v
+          echo "✅ Flutter doctor completed!"
+
+      - name: 🧪 Run Flutter tests
+        run: |
+          echo "🧪 Running Flutter tests..."
+          flutter test --no-coverage
+          echo "✅ Tests completed successfully!"
+
+      - name: 🏗️ Test Flutter build
+        run: |
+          echo "🏗️ Testing Flutter build..."
+          flutter build apk --debug
+          echo "✅ Build test completed successfully!"
+
+      - name: 📊 Show build info
+        run: |
+          echo "📱 Build Information:"
+          echo "Flutter Version: $(flutter --version | head -1)"
+          echo "Dart Version: $(dart --version)"
+          if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
+            APK_SIZE=$(stat -c%s build/app/outputs/flutter-apk/app-debug.apk)
+            echo "APK Size: $(($APK_SIZE / 1024 / 1024)) MB"
+          fi
+
+      - name: 🎉 Success notification
+        run: |
+          echo "🎉 All tests passed successfully!"
+          echo "✅ Dependencies: OK"
+          echo "✅ Tests: OK" 
+          echo "✅ Build: OK"
+          echo "🚀 Ready for deployment!"
