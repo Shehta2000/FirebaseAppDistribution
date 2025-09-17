@@ -142,11 +142,18 @@ jobs:
           if [ -f "ios/Podfile" ]; then
             echo "✅ Podfile found"
           else
-            echo "⚠️ Podfile not found - creating basic Podfile"
-            cd ios
-            pod init || echo "Pod init failed, continuing..."
-            cd ..
+            echo "⚠️ Podfile not found"
           fi
+
+      - name: 🧹 Clean iOS build cache
+        run: |
+          echo "🧹 Cleaning iOS build cache..."
+          cd ios
+          rm -rf Pods
+          rm -rf Podfile.lock
+          rm -rf .symlinks
+          flutter clean
+          cd ..
 
       - name: 🏗️ Build iOS
         run: |
