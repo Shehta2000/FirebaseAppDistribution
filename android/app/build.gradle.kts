@@ -9,10 +9,10 @@ plugins {
 }
 
 // Load keystore properties
-def keystorePropertiesFile = rootProject.file("key.properties")
-def keystoreProperties = new Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = java.util.Properties()
 if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -31,11 +31,11 @@ android {
 
     signingConfigs {
         if (keystorePropertiesFile.exists()) {
-            release {
-                keyAlias = keystoreProperties['keyAlias']
-                keyPassword = keystoreProperties['keyPassword']
-                storeFile = file(keystoreProperties['storeFile'])
-                storePassword = keystoreProperties['storePassword']
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String?
+                keyPassword = keystoreProperties["keyPassword"] as String?
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String?
             }
         }
     }
@@ -53,12 +53,12 @@ android {
 
     buildTypes {
         release {
-            signingConfig = keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
-            minifyEnabled = true
-            proguardFiles = [
-                getDefaultProguardFile('proguard-android-optimize.txt'),
-                'proguard-rules.pro'
-            ]
+            signingConfig = if (keystorePropertiesFile.exists()) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
