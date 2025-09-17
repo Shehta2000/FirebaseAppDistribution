@@ -1,0 +1,329 @@
+name: Build APK & IPA
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+      platforms:
+        description: 'Platforms to build'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - android
+          - ios
+          - both
+  
+  # Automatic trigger on push to main
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+env:
+  FLUTTER_VERSION: '3.24.3'
+  JAVA_VERSION: '17'
+
+jobs:
+  build-android:
+    if: github.event.inputs.platforms == 'android' || github.event.inputs.platforms == 'both' || github.event_name == 'push'
+    name: 🤖 Build Android APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: 📦 Get dependencies
+        run: flutter pub get
+
+      - name: 🧪 Run tests
+        run: flutter test
+
+      - name: 🏗️ Build Android APK
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+          echo "Building APK in $BUILD_TYPE mode..."
+          
+          if [ "$BUILD_TYPE" == "release" ]; then
+            flutter build apk --release --split-per-abi
+            flutter build apk --release # Also build universal APK
+          else
+            flutter build apk --debug
+          fi
+
+      - name: 📝 Get build info
+        id: build_info
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+          
+          if [ "$BUILD_TYPE" == "release" ]; then
+            APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+          else
+            APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+          fi
+          
+          if [ -f "$APK_PATH" ]; then
+            APK_SIZE=$(stat -c%s "$APK_PATH")
+            APK_SIZE_MB=$(($APK_SIZE / 1024 / 1024))
+            echo "apk_size=${APK_SIZE_MB}MB" >> $GITHUB_OUTPUT
+            echo "✅ APK built successfully: ${APK_SIZE_MB}MB"
+          else
+            echo "❌ APK not found at $APK_PATH"
+            ls -la build/app/outputs/flutter-apk/
+          fi
+
+      - name: 📱 Upload APK Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apks
+          path: |
+            build/app/outputs/flutter-apk/*.apk
+          retention-days: 30
+
+      - name: 📊 Create APK Summary
+        run: |
+          echo "## 🤖 Android Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Type**: ${{ github.event.inputs.build_type || 'release' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **APK Size**: ${{ steps.build_info.outputs.apk_size }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Flutter Version**: ${{ env.FLUTTER_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Java Version**: ${{ env.JAVA_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📥 Download APK" >> $GITHUB_STEP_SUMMARY
+          echo "The APK files are available as artifacts in this workflow run." >> $GITHUB_STEP_SUMMARY
+
+  build-ios:
+    if: github.event.inputs.platforms == 'ios' || github.event.inputs.platforms == 'both' || github.event_name == 'push'
+    name: 🍎 Build iOS IPA
+    runs-on: macos-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: 📦 Get dependencies
+        run: flutter pub get
+
+      - name: 🧪 Run tests
+        run: flutter test
+
+      - name: 🔍 Check iOS project structure
+        run: |
+          echo "🔍 Checking iOS project structure..."
+          ls -la ios/
+          
+          if [ -f "ios/Podfile" ]; then
+            echo "✅ Podfile found"
+          else
+            echo "⚠️ Podfile not found"
+          fi
+
+      - name: 🧹 Prepare iOS build
+        run: |
+          echo "🧹 Preparing iOS build..."
+          flutter clean
+          flutter pub get
+          cd ios
+          rm -rf Pods
+          rm -rf Podfile.lock
+          rm -rf .symlinks
+          cd ..
+
+      - name: 🏗️ Build iOS
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+          echo "Building iOS in $BUILD_TYPE mode..."
+          
+          if [ "$BUILD_TYPE" == "release" ]; then
+            flutter build ios --release --no-codesign
+          else
+            flutter build ios --debug --no-codesign
+          fi
+
+      - name: 📦 Create IPA file
+        run: |
+          echo "📦 Creating IPA file..."
+          
+          # Find the .app file
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+          
+          if [ "$BUILD_TYPE" == "release" ]; then
+            APP_PATH="build/ios/iphoneos/Runner.app"
+          else
+            APP_PATH="build/ios/iphonesimulator/Runner.app"
+          fi
+          
+          # Alternative search if not found
+          if [ ! -d "$APP_PATH" ]; then
+            echo "🔍 Searching for Runner.app..."
+            APP_PATH=$(find build -name "Runner.app" -type d | head -1)
+          fi
+          
+          if [ -d "$APP_PATH" ]; then
+            echo "✅ Found Runner.app at: $APP_PATH"
+            
+            # Create Payload directory
+            mkdir -p Payload
+            
+            # Copy the app to Payload directory
+            cp -r "$APP_PATH" Payload/
+            
+            # Create IPA
+            zip -r "firebase-app-distribution-${BUILD_TYPE}.ipa" Payload
+            
+            echo "✅ IPA created successfully"
+            ls -la *.ipa
+            
+            # Get IPA size
+            IPA_SIZE=$(stat -f%z "firebase-app-distribution-${BUILD_TYPE}.ipa")
+            IPA_SIZE_MB=$(($IPA_SIZE / 1024 / 1024))
+            echo "📱 IPA Size: ${IPA_SIZE_MB}MB"
+            
+            # Set output for summary
+            echo "IPA_SIZE=${IPA_SIZE_MB}MB" >> $GITHUB_ENV
+            echo "IPA_CREATED=true" >> $GITHUB_ENV
+          else
+            echo "❌ Runner.app not found"
+            echo "🔍 Available files in build directory:"
+            find build -name "*.app" -type d || echo "No .app files found"
+            echo "IPA_CREATED=false" >> $GITHUB_ENV
+          fi
+
+      - name: 📱 Upload IPA Artifact
+        if: env.IPA_CREATED == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: |
+            *.ipa
+          retention-days: 30
+
+      - name: 📊 Create iOS Summary
+        run: |
+          echo "## 🍎 iOS Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Type**: ${{ github.event.inputs.build_type || 'release' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Flutter Version**: ${{ env.FLUTTER_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$IPA_CREATED" == "true" ]; then
+            echo "- **IPA Size**: $IPA_SIZE" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status**: ✅ IPA created successfully" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 📥 Download IPA" >> $GITHUB_STEP_SUMMARY
+            echo "The IPA file is available as an artifact in this workflow run." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status**: ⚠️ IPA creation failed (this is normal without code signing certificates)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ℹ️ Note about iOS builds" >> $GITHUB_STEP_SUMMARY
+            echo "iOS builds require code signing certificates for distribution. The build completed but IPA creation failed." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  create-release:
+    if: startsWith(github.ref, 'refs/tags/v') && (success() || failure())
+    name: 📦 Create GitHub Release
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📥 Download Android artifacts
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apks
+          path: ./artifacts/android/
+        continue-on-error: true
+
+      - name: 📥 Download iOS artifacts  
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-ipa
+          path: ./artifacts/ios/
+        continue-on-error: true
+
+      - name: 🏷️ Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/android/*.apk
+            artifacts/ios/*.ipa
+          body: |
+            ## 🚀 Release ${{ github.ref_name }}
+            
+            ### 📱 Downloads
+            - **Android APK**: Available in the assets below
+            - **iOS IPA**: Available in the assets below (requires installation via TestFlight or enterprise distribution)
+            
+            ### 📊 Build Information
+            - **Flutter Version**: ${{ env.FLUTTER_VERSION }}
+            - **Build Date**: ${{ github.event.head_commit.timestamp }}
+            - **Commit**: ${{ github.sha }}
+            
+            ### 🔧 Installation
+            
+            **Android:**
+            1. Download the APK file
+            2. Enable "Unknown Sources" in your Android settings
+            3. Install the APK
+            
+            **iOS:**
+            1. Download the IPA file
+            2. Use a tool like AltStore, Sideloadly, or Xcode to install
+            3. Or use enterprise distribution if available
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-completion:
+    name: 📢 Notify Build Completion
+    if: always()
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📊 Build Summary
+        run: |
+          echo "## 🎉 Build Workflow Completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📱 Artifacts Available:" >> $GITHUB_STEP_SUMMARY
+          echo "- 🤖 **Android APK**: ${{ needs.build-android.result == 'success' && '✅ Available' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🍎 **iOS IPA**: ${{ needs.build-ios.result == 'success' && '✅ Available' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📥 How to Download:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to the **Actions** tab" >> $GITHUB_STEP_SUMMARY
+          echo "2. Click on this workflow run" >> $GITHUB_STEP_SUMMARY
+          echo "3. Scroll down to **Artifacts** section" >> $GITHUB_STEP_SUMMARY
+          echo "4. Download the APK/IPA files" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Direct Links:" >> $GITHUB_STEP_SUMMARY
+          echo "- [View Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY

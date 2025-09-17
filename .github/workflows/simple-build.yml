@@ -73,10 +73,20 @@ jobs:
       - name: 📦 Get dependencies
         run: flutter pub get
 
+      - name: 🔧 Setup iOS environment
+        run: |
+          # Set Flutter root environment variable
+          echo "FLUTTER_ROOT=$(which flutter | sed 's|/bin/flutter||')" >> $GITHUB_ENV
+          
+          # Clean iOS build
+          flutter clean
+          flutter pub get
+
       - name: 🏗️ Build iOS
         run: |
           BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
           echo "Building iOS in $BUILD_TYPE mode..."
+          echo "Flutter root: $FLUTTER_ROOT"
           flutter build ios --$BUILD_TYPE --no-codesign
 
       - name: 📦 Create IPA

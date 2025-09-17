@@ -1,4 +1,4 @@
-# Uncomment this line to define a global platform for your project
+# Simple Podfile for Flutter
 platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
@@ -11,16 +11,37 @@ project 'Runner', {
 }
 
 def flutter_root
-  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'ephemeral', 'Generated.xcconfig'), __FILE__)
-  unless File.exist?(generated_xcode_build_settings_path)
-    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure \"flutter pub get\" is executed first"
+  # Try to find Flutter root from environment or default location
+  flutter_root = ENV['FLUTTER_ROOT']
+  if flutter_root && File.exist?(flutter_root)
+    return flutter_root
   end
-
-  File.foreach(generated_xcode_build_settings_path) do |line|
-    matches = line.match(/FLUTTER_ROOT\=(.*)/)
-    return matches[1].strip if matches
+  
+  # Check common Flutter locations
+  possible_roots = [
+    '/usr/local/flutter',
+    '/opt/flutter',
+    File.expand_path('~/flutter'),
+    File.expand_path('~/development/flutter')
+  ]
+  
+  possible_roots.each do |root|
+    if File.exist?(File.join(root, 'bin', 'flutter'))
+      return root
+    end
   end
-  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Flutter/ephemeral/Generated.xcconfig, then run \"flutter pub get\""
+  
+  # Fallback - try to get from generated config if it exists
+  generated_config = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  if File.exist?(generated_config)
+    File.foreach(generated_config) do |line|
+      matches = line.match(/FLUTTER_ROOT\=(.*)/)
+      return matches[1].strip if matches
+    end
+  end
+  
+  # Last resort - assume flutter is in PATH
+  return `which flutter`.strip.gsub('/bin/flutter', '') rescue '/usr/local/flutter'
 end
 
 require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
@@ -32,6 +53,7 @@ target 'Runner' do
   use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  
   target 'RunnerTests' do
     inherit! :search_paths
   end
